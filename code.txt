@@ -1,0 +1,58 @@
+url<-"https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
+census<-read.csv(url,header = F)
+View(census)
+dim(census)
+varnames<- c("age","workclass","fnlwgt","education","education_num","marital_status","occupation",
+             "relationship","race","sex","cap_gain","cap_loss","hours_perweek","country","salary_range")
+colnames(census)<-varnames
+View(census)
+str(census)
+table(is.na(census))
+scale.variables<- function(df,variables){
+  for(variable in variables){
+    df[[variable]]<-scale(df[[variable]],center = T,scale = T)
+  }
+  return(df) 
+} #scaling numeric variables gives better accuracy to the model
+numeric_vars<- c("age","fnlwgt","education_num","cap_gain","cap_loss","hours_perweek")
+census<-scale.variables(census,numeric_vars)
+train.set<-census[1:1000,] #we'll take a portionof data tosave running time
+test.set<-census[1001:1400,]
+#check distribution in train and test set
+table(train.set$salary_range)/nrow(train)
+table(test.set$salary_range)/nrow(test)
+library(randomForest)
+library(caret)
+library(e1071)
+library(mlbench)
+rf.model<-randomForest(salary_range ~ .,data = train.set, importance = T, mtry = 3, nodesize = 5,
+                       ntrees = 1000)
+print(rf.model)
+plot(rf.model)
+#based on the var imp plot u can select your features for the model
+importance(rf.model, sort = T, type = 1)
+varImpPlot(rf.model, sort = T,n.var = 14,type = 1)
+rf.pred<-predict(rf.model, newdata = test.set[,-15], type = "class")
+confusionMatrix(table(rf.pred, test.set$salary_range))
+#model with selected features from the var imp plot
+rf.model1<-randomForest(salary_range ~ . - country,data = train.set, importance = T, mtry = 3, nodesize = 5,
+                       ntrees = 1000)
+print(rf.model1)
+importance(rf.model1, sort = T, type = 1)
+varImpPlot(rf.model1, sort = T, type = 1)
+rf.pred1<-predict(rf.model1,newdata = test.set[,-15],type = "class")
+confusionMatrix(table(rf.pred1, test.set$salary_range))
+
+#alternate method
+# for better prediction accuracy its better to do cross validation of your data 
+
+control <- trainControl(method="cv", number=10, search="grid")
+set.seed(123)
+tunegrid <- expand.grid(.mtry=c(1:13))
+rf_gridsearch <- train(salary_range~., data=train.set[,-14], method="rf", tuneGrid=tunegrid, trControl=control)
+print(rf_gridsearch)
+plot(rf_gridsearch)
+
+pred_cv<-predict(rf_gridsearch, newdata = test.set[,-15],type = "raw")
+confusionMatrix(table(pred_cv, test.set$salary_range))
+# this model gives better predicitve outcome reducing overfitting
